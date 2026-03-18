@@ -392,9 +392,9 @@
               </div>
             </div>
             <div class="legend">
-              <div class="legend-item"><div class="legend-l"><span class="legend-dot" style="background:var(--green)"></span> Concluídos</div><strong id="legendConcluidos">–</strong></div>
-              <div class="legend-item"><div class="legend-l"><span class="legend-dot" style="background:var(--yellow)"></span> Pendentes</div><strong id="legendPendentes">–</strong></div>
-              <div class="legend-item"><div class="legend-l"><span class="legend-dot" style="background:var(--red)"></span> Críticos</div><strong id="legendCriticos">–</strong></div>
+              <div class="legend-item"><div class="legend-l"><span class="legend-dot" style="background:var(--green)"></span> Concluídos</div><strong id="legendConcluidos">0</strong></div>
+              <div class="legend-item"><div class="legend-l"><span class="legend-dot" style="background:var(--yellow)"></span> Pendentes</div><strong id="legendPendentes">0</strong></div>
+              <div class="legend-item"><div class="legend-l"><span class="legend-dot" style="background:var(--red)"></span> Críticos</div><strong id="legendCriticos">0</strong></div>
             </div>
           </div>
         </div>
@@ -503,19 +503,6 @@
       dossiers: _dosData,
       currentView: 'dashboard'
     };
-
-    // Distribui statuses de exemplo para visualização do gráfico
-    (function () {
-      const d = state.dossiers;
-      if (!d.length) return;
-      const nConc = Math.round(d.length * 0.42);
-      const nPend = Math.round(d.length * 0.31);
-      d.forEach(function (item, i) {
-        if (i < nConc)              item.status = 'Concluído';
-        else if (i < nConc + nPend) item.status = 'Pendente';
-        else                        item.status = 'Crítico';
-      });
-    })();
 
     const viewTitles = {
       dashboard: ['Dashboard / Visão geral', 'Painel executivo'],
@@ -977,30 +964,43 @@
       const c  = statusMap['Concluído'] || 0;
       const p  = (statusMap['Pendente'] || 0) + (statusMap['Em análise'] || 0);
       const cr = state.dossiers.length - c - p;
-      const tot = state.dossiers.length || 86;
-
-      document.getElementById('donutTotal').textContent = tot;
+      const tot = state.dossiers.length;
 
       // Atualiza legenda dinamicamente
-      const lc  = document.getElementById('legendConcluidos');
-      const lp  = document.getElementById('legendPendentes');
-      const lcr = document.getElementById('legendCriticos');
-      if (lc)  lc.textContent  = c;
-      if (lp)  lp.textContent  = p;
-      if (lcr) lcr.textContent = cr;
+      document.getElementById('legendConcluidos').textContent = c;
+      document.getElementById('legendPendentes').textContent  = p;
+      document.getElementById('legendCriticos').textContent   = cr < 0 ? 0 : cr;
+      document.getElementById('donutTotal').textContent = tot || 0;
 
       const W = 220, cx = W/2, cy = W/2, R = 90, r = 58;
       ctx.clearRect(0, 0, W, W);
 
+      // Se não há dados, exibe anel cinza placeholder
+      if (tot === 0) {
+        ctx.beginPath();
+        ctx.arc(cx, cy, R, 0, 2 * Math.PI);
+        ctx.arc(cx, cy, r, 0, 2 * Math.PI, true);
+        // fallback: preenche com cor neutra
+        ctx.fillStyle = '#1e293b';
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(cx, cy, r - 2, 0, 2 * Math.PI);
+        ctx.fillStyle = '#09111f';
+        ctx.fill();
+        return;
+      }
+
       const segments = [
-        { value: c,  color: '#22c55e' },
-        { value: p,  color: '#f59e0b' },
-        { value: cr, color: '#ef4444' }
+        { value: c,              color: '#22c55e' },
+        { value: p,              color: '#f59e0b' },
+        { value: Math.max(cr,0), color: '#ef4444' }
       ];
       let start = -Math.PI / 2;
       const gap = 0.04;
       segments.forEach(seg => {
+        if (seg.value <= 0) return;
         const sweep = (seg.value / tot) * 2 * Math.PI - gap;
+        if (sweep <= 0) return;
         ctx.beginPath();
         ctx.moveTo(cx + R * Math.cos(start + gap/2), cy + R * Math.sin(start + gap/2));
         ctx.arc(cx, cy, R, start + gap/2, start + sweep + gap/2);
