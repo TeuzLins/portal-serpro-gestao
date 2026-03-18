@@ -176,16 +176,8 @@
     }
     .bar-label { color:#94a3b8; font-size: 13px; }
     .donut-wrap { display:grid; place-items:center; min-height: 280px; }
-    .donut {
-      width:220px; height:220px; border-radius:50%;
-      background: conic-gradient(var(--green) 0 42%, var(--yellow) 42% 74%, var(--red) 74% 100%);
-      position:relative; box-shadow: 0 20px 40px rgba(0,0,0,.32);
-    }
-    .donut::after {
-      content:""; position:absolute; inset: 32px; border-radius:50%;
-      background: #09111f; border:1px solid rgba(148,163,184,.08);
-    }
-    .donut-center { position:absolute; text-align:center; z-index: 2; }
+    .donut-canvas-wrap { position:relative; display:grid; place-items:center; width:220px; height:220px; }
+    .donut-center { position:absolute; text-align:center; z-index: 2; pointer-events:none; }
     .legend { display:grid; gap:12px; margin-top: 18px; }
     .legend-item { display:flex; align-items:center; justify-content:space-between; color:#cbd5e1; }
     .legend-l { display:flex; align-items:center; gap:10px; }
@@ -391,18 +383,18 @@
             <h3 class="section-title">Status dos dossiês</h3>
             <div class="section-sub">Distribuição operacional por situação</div>
             <div class="donut-wrap">
-              <div style="position:relative; display:grid; place-items:center;">
-                <div class="donut"></div>
+              <div class="donut-canvas-wrap">
+                <canvas id="donutChart" width="220" height="220"></canvas>
                 <div class="donut-center">
-                  <div class="muted">Total</div>
-                  <div style="font-size:34px; font-weight:800;">86</div>
+                  <div class="muted" style="font-size:13px;">Total</div>
+                  <div id="donutTotal" style="font-size:34px; font-weight:800;">86</div>
                 </div>
               </div>
             </div>
             <div class="legend">
-              <div class="legend-item"><div class="legend-l"><span class="legend-dot" style="background:var(--green)"></span> Concluídos</div><strong>36</strong></div>
-              <div class="legend-item"><div class="legend-l"><span class="legend-dot" style="background:var(--yellow)"></span> Pendentes</div><strong>27</strong></div>
-              <div class="legend-item"><div class="legend-l"><span class="legend-dot" style="background:var(--red)"></span> Críticos</div><strong>23</strong></div>
+              <div class="legend-item"><div class="legend-l"><span class="legend-dot" style="background:var(--green)"></span> Concluídos</div><strong id="legendConcluidos">–</strong></div>
+              <div class="legend-item"><div class="legend-l"><span class="legend-dot" style="background:var(--yellow)"></span> Pendentes</div><strong id="legendPendentes">–</strong></div>
+              <div class="legend-item"><div class="legend-l"><span class="legend-dot" style="background:var(--red)"></span> Críticos</div><strong id="legendCriticos">–</strong></div>
             </div>
           </div>
         </div>
@@ -511,6 +503,19 @@
       dossiers: _dosData,
       currentView: 'dashboard'
     };
+
+    // Distribui statuses de exemplo para visualização do gráfico
+    (function () {
+      const d = state.dossiers;
+      if (!d.length) return;
+      const nConc = Math.round(d.length * 0.42);
+      const nPend = Math.round(d.length * 0.31);
+      d.forEach(function (item, i) {
+        if (i < nConc)              item.status = 'Concluído';
+        else if (i < nConc + nPend) item.status = 'Pendente';
+        else                        item.status = 'Crítico';
+      });
+    })();
 
     const viewTitles = {
       dashboard: ['Dashboard / Visão geral', 'Painel executivo'],
@@ -728,6 +733,7 @@
       `).join('') : `<tr><td colspan="7" class="empty">Nenhum dossiê encontrado.</td></tr>`;
       document.getElementById('statDossiers').textContent = state.dossiers.length;
       document.getElementById('statDossiersPending').textContent = state.dossiers.filter(d => d.status === 'Pendente').length;
+      drawDonut();
     }
 
     function populateEmployeeSelect() {
@@ -955,9 +961,70 @@
       }
     });
 
+    function drawDonut() {
+      const canvas = document.getElementById('donutChart');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+
+      // Conta todos os status reais
+      const statusMap = {};
+      state.dossiers.forEach(d => {
+        const s = d.status || 'Pendente';
+        statusMap[s] = (statusMap[s] || 0) + 1;
+      });
+
+      // Agrupa: Concluído=verde, Pendente/Em análise=amarelo, resto=vermelho
+      const c  = statusMap['Concluído'] || 0;
+      const p  = (statusMap['Pendente'] || 0) + (statusMap['Em análise'] || 0);
+      const cr = state.dossiers.length - c - p;
+      const tot = state.dossiers.length || 86;
+
+      document.getElementById('donutTotal').textContent = tot;
+
+      // Atualiza legenda dinamicamente
+      const lc  = document.getElementById('legendConcluidos');
+      const lp  = document.getElementById('legendPendentes');
+      const lcr = document.getElementById('legendCriticos');
+      if (lc)  lc.textContent  = c;
+      if (lp)  lp.textContent  = p;
+      if (lcr) lcr.textContent = cr;
+
+      const W = 220, cx = W/2, cy = W/2, R = 90, r = 58;
+      ctx.clearRect(0, 0, W, W);
+
+      const segments = [
+        { value: c,  color: '#22c55e' },
+        { value: p,  color: '#f59e0b' },
+        { value: cr, color: '#ef4444' }
+      ];
+      let start = -Math.PI / 2;
+      const gap = 0.04;
+      segments.forEach(seg => {
+        const sweep = (seg.value / tot) * 2 * Math.PI - gap;
+        ctx.beginPath();
+        ctx.moveTo(cx + R * Math.cos(start + gap/2), cy + R * Math.sin(start + gap/2));
+        ctx.arc(cx, cy, R, start + gap/2, start + sweep + gap/2);
+        ctx.arc(cx, cy, r, start + sweep + gap/2, start + gap/2, true);
+        ctx.closePath();
+        ctx.fillStyle = seg.color;
+        ctx.shadowColor = seg.color;
+        ctx.shadowBlur = 12;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        start += sweep + gap;
+      });
+
+      // inner circle hole fill
+      ctx.beginPath();
+      ctx.arc(cx, cy, r - 2, 0, 2 * Math.PI);
+      ctx.fillStyle = '#09111f';
+      ctx.fill();
+    }
+
     renderSectorBars();
     renderEmployees();
     renderDossiers();
+    drawDonut();
     populateEmployeeSelect();
     showView('dashboard');
   </script>
