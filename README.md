@@ -404,7 +404,7 @@ Criado automaticamente pelo `init.sql`:
 
 ## Integração com o Front-end
 
-Consulte o arquivo `FRONTEND_INTEGRATION.js` para o guia completo.
+Consulte o arquivo `frontend.js` para o guia completo.
 
 **Resumo rápido:**
 1. **Login** → guarda o token em `localStorage`
