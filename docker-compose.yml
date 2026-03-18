@@ -1,48 +1,75 @@
 version: '3.9'
 
+# ─────────────────────────────────────────────────────────────────────────────
+#  Portal SERPRO – Orquestração completa com Docker Compose
+#  Serviços: db (PostgreSQL) · api (Node.js) · nginx (reverse proxy / frontend)
+# ─────────────────────────────────────────────────────────────────────────────
+
 services:
 
+  # ── Banco de dados ──────────────────────────────────────────────────────────
   db:
     image: postgres:16-alpine
     container_name: serpro-db
     restart: unless-stopped
     environment:
-      POSTGRES_DB: serpro
-      POSTGRES_USER: serpro
-      POSTGRES_PASSWORD: 
+      POSTGRES_DB:       serpro
+      POSTGRES_USER:     serpro
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-serpro_pass_dev}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     ports:
       - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U serpro"]
-      interval: 5s
+      test: ["CMD-SHELL", "pg_isready -U serpro -d serpro"]
+      interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
+    networks:
+      - serpro-net
 
+  # ── API Back-end ────────────────────────────────────────────────────────────
   api:
-    build: ./api
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: serpro-api
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql://serpro:@db:5432/serpro
-      PORT: 3000
-      JWT_SECRET: 
+      NODE_ENV:       ${NODE_ENV:-production}
+      PORT:           3000
+      DATABASE_URL:   postgresql://serpro:${DB_PASSWORD:-serpro_pass_dev}@db:5432/serpro
+      JWT_SECRET:     ${JWT_SECRET:?JWT_SECRET é obrigatório em produção}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-8h}
+      CORS_ORIGINS:   ${CORS_ORIGINS:-http://localhost}
     ports:
       - "3000:3000"
     depends_on:
       db:
         condition: service_healthy
+    networks:
+      - serpro-net
 
+  # ── Nginx (frontend + reverse proxy) ────────────────────────────────────────
   nginx:
-    build: ./nginx
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
     container_name: serpro-nginx
     restart: unless-stopped
     ports:
       - "80:80"
     depends_on:
       - api
+    networks:
+      - serpro-net
 
 volumes:
   postgres_data:
+    driver: local
+
+networks:
+  serpro-net:
+    driver: bridge
